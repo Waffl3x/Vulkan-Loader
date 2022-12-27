@@ -417,7 +417,7 @@ bool check_name_matches_filter_environment_var(const struct loader_instance *ins
 
 // Get the layer name(s) from the env_name environment variable. If layer is found in
 // search_list then add it to layer_list.  But only add it to layer_list if type_flags matches.
-VkResult loader_add_environment_layers(struct loader_instance *inst, const enum layer_type_flags type_flags, const char *env_name,
+VkResult loader_add_environment_layers(const struct loader_instance *inst, const enum layer_type_flags type_flags, const char *env_name,
                                        const struct loader_envvar_filter *enable_filter,
                                        const struct loader_envvar_disable_layers_filter *disable_filter,
                                        struct loader_layer_list *target_list, struct loader_layer_list *expanded_target_list,
@@ -522,8 +522,10 @@ VkResult loader_add_environment_layers(struct loader_instance *inst, const enum 
 
         // If not a meta-layer, simply add it.
         if (0 == (source_prop->type_flags & VK_LAYER_TYPE_FLAG_META_LAYER)) {
-            res = loader_add_layer_properties_to_list(inst, target_list, 1, source_prop);
-            if (res == VK_ERROR_OUT_OF_HOST_MEMORY) goto out;
+            if (target_list != NULL) {
+                res = loader_add_layer_properties_to_list(inst, target_list, 1, source_prop);
+                if (res == VK_ERROR_OUT_OF_HOST_MEMORY) goto out;
+            }
             res = loader_add_layer_properties_to_list(inst, expanded_target_list, 1, source_prop);
             if (res == VK_ERROR_OUT_OF_HOST_MEMORY) goto out;
         } else {

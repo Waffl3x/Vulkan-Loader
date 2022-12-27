@@ -145,8 +145,9 @@ void loader_remove_logical_device(const struct loader_instance *inst, struct loa
 void loader_destroy_logical_device(const struct loader_instance *inst, struct loader_device *dev,
                                    const VkAllocationCallbacks *pAllocator);
 
-VkResult loader_enable_instance_layers(struct loader_instance *inst, const VkInstanceCreateInfo *pCreateInfo,
-                                       const struct loader_layer_list *instance_layers);
+VkResult loader_enable_instance_layers(const struct loader_instance *inst, const VkInstanceCreateInfo *pCreateInfo,
+                                       const struct loader_layer_list *instance_layers, struct loader_layer_list *legacy_app_activated_layer_list,
+                                       struct loader_layer_list *expanded_activated_layer_list);
 
 VkResult loader_create_instance_chain(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator,
                                       struct loader_instance *inst, VkInstance *created_instance);

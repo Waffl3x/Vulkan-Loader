@@ -874,9 +874,16 @@ static VkResult loader_add_layer_names_to_list(const struct loader_instance *ins
         }
 
         // Make sure the layer isn't already in the output_list, skip adding it if it is.
-        if (loader_find_layer_name_in_list(source_name, output_list)) {
-            continue;
+        if (output_list != NULL) {
+            if (loader_find_layer_name_in_list(source_name, output_list)) {
+                continue;
+            }
+        } else {
+            if (loader_find_layer_name_in_list(source_name, expanded_output_list)) {
+                continue;
+            }
         }
+
 
         if (!loader_layer_is_available(inst, enable_filter, disable_filter, layer_prop)) {
             continue;
@@ -884,10 +891,14 @@ static VkResult loader_add_layer_names_to_list(const struct loader_instance *ins
 
         // If not a meta-layer, simply add it.
         if (0 == (layer_prop->type_flags & VK_LAYER_TYPE_FLAG_META_LAYER)) {
-            err = loader_add_layer_properties_to_list(inst, output_list, 1, layer_prop);
-            if (err == VK_ERROR_OUT_OF_HOST_MEMORY) return err;
-            err = loader_add_layer_properties_to_list(inst, expanded_output_list, 1, layer_prop);
-            if (err == VK_ERROR_OUT_OF_HOST_MEMORY) return err;
+            if (output_list != NULL) {
+                err = loader_add_layer_properties_to_list(inst, output_list, 1, layer_prop);
+                if (err == VK_ERROR_OUT_OF_HOST_MEMORY) return err;
+            }
+            if (expanded_output_list != NULL) {
+                err = loader_add_layer_properties_to_list(inst, expanded_output_list, 1, layer_prop);
+                if (err == VK_ERROR_OUT_OF_HOST_MEMORY) return err;
+            }
         } else {
             err = loader_add_meta_layer(inst, enable_filter, disable_filter, layer_prop, output_list, expanded_output_list,
                                         source_list, NULL);
@@ -988,8 +999,10 @@ static VkResult loader_add_implicit_layer(const struct loader_instance *inst, co
     VkResult result = VK_SUCCESS;
     if (loader_implicit_layer_is_enabled(inst, enable_filter, disable_filter, prop)) {
         if (0 == (prop->type_flags & VK_LAYER_TYPE_FLAG_META_LAYER)) {
-            result = loader_add_layer_properties_to_list(inst, target_list, 1, prop);
-            if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
+            if (target_list != NULL) {
+                result = loader_add_layer_properties_to_list(inst, target_list, 1, prop);
+                if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
+            }
             if (NULL != expanded_target_list) {
                 result = loader_add_layer_properties_to_list(inst, expanded_target_list, 1, prop);
             }
@@ -1045,8 +1058,10 @@ VkResult loader_add_meta_layer(const struct loader_instance *inst, const struct 
                     if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
                     if (!found_layers_in_component_meta_layer) found_all_component_layers = false;
                 } else {
-                    result = loader_add_layer_properties_to_list(inst, target_list, 1, search_prop);
-                    if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
+                    if (target_list != NULL) {
+                        result = loader_add_layer_properties_to_list(inst, target_list, 1, search_prop);
+                        if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
+                    }
                     if (NULL != expanded_target_list) {
                         result = loader_add_layer_properties_to_list(inst, expanded_target_list, 1, search_prop);
                         if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
@@ -1063,8 +1078,10 @@ VkResult loader_add_meta_layer(const struct loader_instance *inst, const struct 
 
     // Add this layer to the overall target list (not the expanded one)
     if (found_all_component_layers) {
-        result = loader_add_layer_properties_to_list(inst, target_list, 1, prop);
-        if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
+        if (target_list != NULL) {
+            result = loader_add_layer_properties_to_list(inst, target_list, 1, prop);
+            if (result == VK_ERROR_OUT_OF_HOST_MEMORY) return result;
+        }
         // Write the result to out_found_all_component_layers in case this function is being recursed
         if (out_found_all_component_layers) *out_found_all_component_layers = found_all_component_layers;
     }
@@ -1204,7 +1221,7 @@ void loader_destroy_logical_device(const struct loader_instance *inst, struct lo
         dev->alloc_callbacks = *pAllocator;
     }
     loader_destroy_layer_list(inst, dev, &dev->expanded_activated_layer_list);
-    loader_destroy_layer_list(inst, dev, &dev->app_activated_layer_list);
+    // loader_destroy_layer_list(inst, dev, &dev->app_activated_layer_list);
     loader_device_heap_free(dev, dev);
 }
 
@@ -4116,26 +4133,32 @@ static VkResult loader_add_implicit_layers(const struct loader_instance *inst, c
     return VK_SUCCESS;
 }
 
-VkResult loader_enable_instance_layers(struct loader_instance *inst, const VkInstanceCreateInfo *pCreateInfo,
-                                       const struct loader_layer_list *instance_layers) {
+VkResult loader_enable_instance_layers(const struct loader_instance *inst, const VkInstanceCreateInfo *pCreateInfo,
+                                       const struct loader_layer_list *instance_layers,
+                                       struct loader_layer_list *legacy_app_activated_layer_list,
+                                       struct loader_layer_list *expanded_activated_layer_list) {
     VkResult res = VK_SUCCESS;
     struct loader_envvar_filter layers_enable_filter;
     struct loader_envvar_disable_layers_filter layers_disable_filter;
 
     assert(inst && "Cannot have null instance");
 
-    if (!loader_init_layer_list(inst, &inst->app_activated_layer_list)) {
-        loader_log(inst, VULKAN_LOADER_ERROR_BIT, 0,
-                   "loader_enable_instance_layers: Failed to initialize application version of the layer list");
-        res = VK_ERROR_OUT_OF_HOST_MEMORY;
-        goto out;
+    if (legacy_app_activated_layer_list != NULL) {
+        if (!loader_init_layer_list(inst, legacy_app_activated_layer_list)) {
+            loader_log(inst, VULKAN_LOADER_ERROR_BIT, 0,
+                    "loader_enable_instance_layers: Failed to initialize application version of the layer list");
+            res = VK_ERROR_OUT_OF_HOST_MEMORY;
+            goto out;
+        }
     }
 
-    if (!loader_init_layer_list(inst, &inst->expanded_activated_layer_list)) {
-        loader_log(inst, VULKAN_LOADER_ERROR_BIT, 0,
-                   "loader_enable_instance_layers: Failed to initialize expanded version of the layer list");
-        res = VK_ERROR_OUT_OF_HOST_MEMORY;
-        goto out;
+    if (expanded_activated_layer_list != NULL) {
+        if (!loader_init_layer_list(inst, expanded_activated_layer_list)) {
+            loader_log(inst, VULKAN_LOADER_ERROR_BIT, 0,
+                    "loader_enable_instance_layers: Failed to initialize expanded version of the layer list");
+            res = VK_ERROR_OUT_OF_HOST_MEMORY;
+            goto out;
+        }
     }
 
     // Parse the filter environment variables to determine if we have any special behavior
@@ -4149,23 +4172,23 @@ VkResult loader_enable_instance_layers(struct loader_instance *inst, const VkIns
     }
 
     // Add any implicit layers first
-    res = loader_add_implicit_layers(inst, &layers_enable_filter, &layers_disable_filter, &inst->app_activated_layer_list,
-                                     &inst->expanded_activated_layer_list, instance_layers);
+    res = loader_add_implicit_layers(inst, &layers_enable_filter, &layers_disable_filter, legacy_app_activated_layer_list,
+                                     expanded_activated_layer_list, instance_layers);
     if (res != VK_SUCCESS) {
         goto out;
     }
 
     // Add any layers specified via environment variable next
     res = loader_add_environment_layers(inst, VK_LAYER_TYPE_FLAG_EXPLICIT_LAYER, "VK_INSTANCE_LAYERS", &layers_enable_filter,
-                                        &layers_disable_filter, &inst->app_activated_layer_list,
-                                        &inst->expanded_activated_layer_list, instance_layers);
+                                        &layers_disable_filter, legacy_app_activated_layer_list,
+                                        expanded_activated_layer_list, instance_layers);
     if (res != VK_SUCCESS) {
         goto out;
     }
 
     // Add layers specified by the application
-    res = loader_add_layer_names_to_list(inst, &layers_enable_filter, &layers_disable_filter, &inst->app_activated_layer_list,
-                                         &inst->expanded_activated_layer_list, pCreateInfo->enabledLayerCount,
+    res = loader_add_layer_names_to_list(inst, &layers_enable_filter, &layers_disable_filter, legacy_app_activated_layer_list,
+                                         expanded_activated_layer_list, pCreateInfo->enabledLayerCount,
                                          pCreateInfo->ppEnabledLayerNames, instance_layers);
 
     for (uint32_t i = 0; i < inst->expanded_activated_layer_list.count; i++) {
@@ -4269,25 +4292,25 @@ VKAPI_ATTR VkResult VKAPI_CALL loader_layer_create_device(VkInstance instance, V
     }
 
     // Copy the application enabled instance layer list into the device
-    if (NULL != inst->app_activated_layer_list.list) {
-        dev->app_activated_layer_list.capacity = inst->app_activated_layer_list.capacity;
-        dev->app_activated_layer_list.count = inst->app_activated_layer_list.count;
-        dev->app_activated_layer_list.list =
-            loader_device_heap_alloc(dev, inst->app_activated_layer_list.capacity, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-        if (dev->app_activated_layer_list.list == NULL) {
-            loader_log(inst, VULKAN_LOADER_ERROR_BIT, 0,
-                       "vkCreateDevice: Failed to allocate application activated layer list of size %d.",
-                       inst->app_activated_layer_list.capacity);
-            res = VK_ERROR_OUT_OF_HOST_MEMORY;
-            goto out;
-        }
-        memcpy(dev->app_activated_layer_list.list, inst->app_activated_layer_list.list,
-               sizeof(*dev->app_activated_layer_list.list) * dev->app_activated_layer_list.count);
-    } else {
-        dev->app_activated_layer_list.capacity = 0;
-        dev->app_activated_layer_list.count = 0;
-        dev->app_activated_layer_list.list = NULL;
-    }
+    // if (NULL != inst->app_activated_layer_list.list) {
+    //     dev->app_activated_layer_list.capacity = inst->app_activated_layer_list.capacity;
+    //     dev->app_activated_layer_list.count = inst->app_activated_layer_list.count;
+    //     dev->app_activated_layer_list.list =
+    //         loader_device_heap_alloc(dev, inst->app_activated_layer_list.capacity, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+    //     if (dev->app_activated_layer_list.list == NULL) {
+    //         loader_log(inst, VULKAN_LOADER_ERROR_BIT, 0,
+    //                    "vkCreateDevice: Failed to allocate application activated layer list of size %d.",
+    //                    inst->app_activated_layer_list.capacity);
+    //         res = VK_ERROR_OUT_OF_HOST_MEMORY;
+    //         goto out;
+    //     }
+    //     memcpy(dev->app_activated_layer_list.list, inst->app_activated_layer_list.list,
+    //            sizeof(*dev->app_activated_layer_list.list) * dev->app_activated_layer_list.count);
+    // } else {
+    //     dev->app_activated_layer_list.capacity = 0;
+    //     dev->app_activated_layer_list.count = 0;
+    //     dev->app_activated_layer_list.list = NULL;
+    // }
 
     // Copy the expanded enabled instance layer list into the device
     if (NULL != inst->expanded_activated_layer_list.list) {

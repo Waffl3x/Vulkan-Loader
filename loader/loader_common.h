@@ -177,7 +177,7 @@ struct loader_device {
     //            This is what must be returned to the application on Enumerate calls.
     //  expanded_ is the version based on expanding meta-layers into their
     //            individual component layers.  This is what is used internally.
-    struct loader_layer_list app_activated_layer_list;
+    // struct loader_layer_list app_activated_layer_list;
     struct loader_layer_list expanded_activated_layer_list;
 
     VkAllocationCallbacks alloc_callbacks;
@@ -273,8 +273,11 @@ struct loader_instance {
     //            This is what must be returned to the application on Enumerate calls.
     //  expanded_ is the version based on expanding meta-layers into their
     //            individual component layers.  This is what is used internally.
-    struct loader_layer_list app_activated_layer_list;
+    // struct loader_layer_list app_activated_layer_list;
     struct loader_layer_list expanded_activated_layer_list;
+    uint32_t app_requested_layer_name_count;
+    char **app_requested_layer_names;
+
 
     VkInstance instance;  // layers/ICD instance returned to trampoline
 
